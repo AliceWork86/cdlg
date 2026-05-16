@@ -89,6 +89,20 @@ bash cdlg/cdlg.sh
 
 Runs `cdlg` from the current directory — no installation needed.
 
+## Update
+
+If `cdlg` is already installed, re-run `--install` to overwrite it:
+
+```bash
+bash cdlg.sh --install
+```
+
+Or update directly from the repository without cloning:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/main/cdlg.sh | bash -s -- --install
+```
+
 ## First run
 
 `cdlg` shows sessions for the directory you launch it from — the same way Claude Code groups them.
@@ -123,6 +137,15 @@ cdlg
 | `l` | Toggle language (EN ↔ RU) |
 | `q` | Quit |
 
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--dir <path>` | Sessions directory (overrides `CDLG_DIR`) |
+| `--install` | Install to `~/.local/bin` (or `$CDLG_INSTALL_DIR`) |
+| `--version` | Print version and exit |
+| `--help` | Print help and exit |
+
 ## Configuration
 
 Edit the two variables at the top of `cdlg.sh`:
@@ -140,10 +163,19 @@ export CDLG_DIR="$HOME/dialogs"
 export CDLG_LANG="en"
 ```
 
-## Token columns
+`CDLG_INSTALL_DIR` overrides the install location (default: `~/.local/bin`):
+
+```bash
+CDLG_INSTALL_DIR="$HOME/bin" bash cdlg.sh --install
+```
+
+## Session list columns
 
 | Column | Meaning |
 |--------|---------|
+| `[date]` | Date of last activity in the session |
+| `N↕` | Number of messages you sent |
+| `model` | Claude model used |
 | `↑ input` | Real input tokens billed |
 | `+ cache-write` | Tokens written to prompt cache |
 | `~ cache-read` | Tokens served from cache (cheaper) |

@@ -1,18 +1,65 @@
 #!/bin/bash
 
-if [[ "$1" == "--install" ]]; then
-  install_dir="${CDLG_INSTALL_DIR:-$HOME/.local/bin}"
-  mkdir -p "$install_dir"
-  cp "$0" "$install_dir/cdlg"
-  chmod +x "$install_dir/cdlg"
-  echo "Installed: $install_dir/cdlg"
-  if [[ ":$PATH:" != *":$install_dir:"* ]]; then
-    echo ""
-    echo "  ~/.local/bin is not in your PATH. Add to ~/.bashrc or ~/.zshrc:"
-    echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
-  fi
-  exit 0
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install)
+      install_dir="${CDLG_INSTALL_DIR:-$HOME/.local/bin}"
+      mkdir -p "$install_dir"
+      cp "$0" "$install_dir/cdlg"
+      chmod +x "$install_dir/cdlg"
+      echo "Installed: $install_dir/cdlg"
+      if [[ ":$PATH:" != *":$install_dir:"* ]]; then
+        echo ""
+        echo "  ~/.local/bin is not in your PATH. Add to ~/.bashrc or ~/.zshrc:"
+        echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+      fi
+      exit 0
+      ;;
+    --version|-v)
+      echo "cdlg 0.0.1"
+      exit 0
+      ;;
+    --help|-h)
+      cat <<'EOF'
+Usage: cdlg [OPTIONS]
+
+Session browser for Claude Code.
+
+Options:
+  --dir <path>    Sessions directory (overrides CDLG_DIR)
+  --install       Install to ~/.local/bin (or $CDLG_INSTALL_DIR)
+  --version       Print version and exit
+  --help          Print this help and exit
+
+Environment:
+  CDLG_DIR          Sessions directory (default: current directory)
+  CDLG_LANG         Language: en, ru (default: auto from $LANG)
+  CDLG_INSTALL_DIR  Install path (default: ~/.local/bin)
+
+Keys:
+  1–N    Resume session N
+  Enter  New session
+  l      Toggle EN/RU
+  q      Quit
+EOF
+      exit 0
+      ;;
+    --dir)
+      if [[ -z "$2" ]]; then
+        echo "cdlg: --dir requires a path" >&2
+        exit 1
+      fi
+      CDLG_DIR="$(cd "$2" 2>/dev/null && pwd || echo "$2")"
+      shift
+      ;;
+    *)
+      echo "cdlg: unknown option: $1" >&2
+      echo "Try 'cdlg --help' for usage." >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 # Colors
 R='\033[0;31m'
@@ -73,7 +120,7 @@ set_locale
 # Filled by check_deps
 VER_CLAUDE=""
 VER_PYTHON=""
-VER_BASH="${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}"
+VER_BASH="${BASH_VERSION:-0.0.0}"
 
 check_deps() {
   local ok=1
@@ -91,9 +138,11 @@ check_deps() {
     errors+=("  ${R}✗${N} python3   ${R}not found${N}")
   fi
 
-  if (( BASH_VERSINFO[0] < 3 || (BASH_VERSINFO[0] == 3 && BASH_VERSINFO[1] < 2) )); then
-    ok=0
-    errors+=("  ${R}✗${N} bash      ${R}${VER_BASH} — requires 3.2+${N}")
+  if [[ -n "${BASH_VERSION:-}" ]]; then
+    if (( BASH_VERSINFO[0] < 3 || (BASH_VERSINFO[0] == 3 && BASH_VERSINFO[1] < 2) )); then
+      ok=0
+      errors+=("  ${R}✗${N} bash      ${R}${VER_BASH} — requires 3.2+${N}")
+    fi
   fi
 
   if [[ $ok -eq 0 ]]; then
