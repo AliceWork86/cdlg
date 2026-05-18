@@ -7,39 +7,16 @@ A minimal session browser for [Claude Code](https://claude.ai/code). Pick up any
 
 ## Demo
 
-```
-    ╔═══════════════════════════════════════╗
-    ║                                       ║
-    ║           ___  ___  _    ___          ║
-    ║          / __||   \| |  / __|         ║
-    ║         | (__ | |) | |_|\__ \         ║
-    ║          \___|___/ |___||___/         ║
-    ║                                       ║
-    ║         cdlg · Console Dialogs        ║
-    ║         script v0.0.1                 ║
-    ║                                       ║
-    ╚═══════════════════════════════════════╝
-
-  ✓ claude 2.1.139   ✓ python3 3.12.3   ✓ bash 5.2.21
-
-  Dialogs: /home/user/dialogs
-  tokens: ↑input  +cache-write  ~cache-read  ↓output  model: cyan
-
-   1. [2026-05-14]  12↕  sonnet-4-6    ↑18k   +64k   ~312k    ↓9k  Explain the authentication flow
-   2. [2026-05-13]   7↕  sonnet-4-6     ↑6k   +21k    ~98k    ↓4k  Refactor the parser module
-   3. [2026-05-11]   3↕  opus-4-7       ↑2k    +8k    ~14k    ↓1k  Draft release notes for v2.0
-
-  ─────────────────────────────────────────
-  Number / Enter — new / l — ru / q — quit:
-```
-
 ![cdlg demo](demo.gif)
 
 ## Features
 
+- **Project picker** — browse all Claude projects on startup, no `CDLG_DIR` needed
 - **Token stats per session** — input, cache-write, cache-read, output at a glance
+- **Token totals** — cumulative usage across all sessions in the project
 - **Resume by number** — no UUIDs, no digging through `~/.claude/projects/`
 - **Bilingual UI** — EN/RU, auto-detected from `$LANG`, toggle with `l`
+- **Shell completions** — `--completion bash|zsh` prints a ready-to-source script
 - **Zero dependencies** — bash + python3 stdlib, nothing to install
 - **No sudo** — installs to `~/.local/bin` via `--install`
 - **bash 3.2+** — works on macOS out of the box
@@ -67,7 +44,7 @@ All sessions launched from this directory are grouped together and shown by `cdl
 **Quick install (recommended)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/v0.0.1/cdlg.sh -o /tmp/cdlg.sh
+curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/v0.0.2/cdlg.sh -o /tmp/cdlg.sh
 bash /tmp/cdlg.sh --install
 ```
 
@@ -143,6 +120,7 @@ cdlg
 |------|-------------|
 | `--dir <path>` | Sessions directory (overrides `CDLG_DIR`) |
 | `--install` | Install to `~/.local/bin` (or `$CDLG_INSTALL_DIR`) |
+| `--completion bash\|zsh` | Print shell completion script to stdout |
 | `--version` | Print version and exit |
 | `--help` | Print help and exit |
 

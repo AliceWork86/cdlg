@@ -16,7 +16,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     --version|-v)
-      echo "cdlg 0.0.1"
+      echo "cdlg 0.0.2"
       exit 0
       ;;
     --help|-h)
@@ -26,10 +26,11 @@ Usage: cdlg [OPTIONS]
 Session browser for Claude Code.
 
 Options:
-  --dir <path>    Sessions directory (overrides CDLG_DIR)
-  --install       Install to ~/.local/bin (or $CDLG_INSTALL_DIR)
-  --version       Print version and exit
-  --help          Print this help and exit
+  --dir <path>          Sessions directory (overrides CDLG_DIR)
+  --install             Install to ~/.local/bin (or $CDLG_INSTALL_DIR)
+  --completion bash|zsh Print shell completion script to stdout
+  --version             Print version and exit
+  --help                Print this help and exit
 
 Environment:
   CDLG_DIR          Sessions directory (default: current directory)
@@ -42,6 +43,49 @@ Keys:
   l      Toggle EN/RU
   q      Quit
 EOF
+      exit 0
+      ;;
+    --completion)
+      case "$2" in
+        bash)
+          cat <<'EOF'
+_cdlg_completion() {
+  local cur prev
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  case "$prev" in
+    --dir)
+      COMPREPLY=( $(compgen -d -- "$cur") )
+      return ;;
+    --completion)
+      COMPREPLY=( $(compgen -W "bash zsh" -- "$cur") )
+      return ;;
+  esac
+  COMPREPLY=( $(compgen -W "--dir --install --completion --version --help" -- "$cur") )
+}
+complete -F _cdlg_completion cdlg
+EOF
+          ;;
+        zsh)
+          cat <<'EOF'
+#compdef cdlg
+_cdlg() {
+  _arguments \
+    '--dir[sessions directory]:directory:_directories' \
+    '--install[install to ~/.local/bin]' \
+    '--completion[print shell completion script]:shell:(bash zsh)' \
+    '--version[print version]' \
+    '--help[print help]'
+}
+_cdlg
+EOF
+          ;;
+        *)
+          echo "cdlg: --completion requires 'bash' or 'zsh'" >&2
+          exit 1
+          ;;
+      esac
       exit 0
       ;;
     --dir)
@@ -74,18 +118,30 @@ N='\033[0m'
 # ── Settings ───────────────────────────────
 CDLG_DIR="${CDLG_DIR:-}"    # path to dialogs directory (empty = current directory)
 CDLG_LANG="${CDLG_LANG:-}"  # language: ru, en (empty = auto-detect from $LANG)
+LANGS=("en" "ru")           # supported languages, cycled by l key
 # ───────────────────────────────────────────
 
-SCRIPT_VERSION="0.0.1"
+SCRIPT_VERSION="0.0.2"
 
 PROJECT_DIR="${CDLG_DIR:-$(pwd)}"
 export CDLG_PROJECT_DIR="$PROJECT_DIR"
 
 set_locale() {
+  local lang first="" seen=0
+  for lang in "${LANGS[@]}"; do
+    [[ -z "$first" ]] && first="$lang"
+    if [[ $seen -eq 1 ]]; then
+      MSG_LANG_SWITCH="$lang"
+      seen=2
+      break
+    fi
+    [[ "$lang" == "$_lang" ]] && seen=1
+  done
+  [[ $seen -eq 1 ]] && MSG_LANG_SWITCH="$first"
   case "$_lang" in
     ru)
       MSG_NO_DIALOGS="Диалогов нет. Начинаем новый."
-      MSG_PROMPT="Номер / Enter — новый / l — en / q — выход: "
+      MSG_PROMPT="Номер / Enter — новый / l — ${MSG_LANG_SWITCH} / q — выход: "
       MSG_DIALOGS="Диалоги:"
       MSG_EXIT="Выход."
       MSG_INVALID="Неверный ввод."
@@ -95,11 +151,15 @@ set_locale() {
       MSG_CACHE_R="кэш-чтение"
       MSG_OUTPUT="вывод"
       MSG_MODEL="модель:"
+      MSG_TOTAL="Итого:"
+      MSG_PROJECTS="Проекты:"
+      MSG_SESSIONS="сессий"
+      MSG_SELECT_PROJ="Номер / l — ${MSG_LANG_SWITCH} / q — выход: "
       MSG_DEPS_ERR="Отсутствуют зависимости:"
       ;;
     *)
       MSG_NO_DIALOGS="No dialogs. Starting new."
-      MSG_PROMPT="Number / Enter — new / l — ru / q — quit: "
+      MSG_PROMPT="Number / Enter — new / l — ${MSG_LANG_SWITCH} / q — quit: "
       MSG_DIALOGS="Dialogs:"
       MSG_EXIT="Bye."
       MSG_INVALID="Invalid input."
@@ -109,6 +169,10 @@ set_locale() {
       MSG_CACHE_R="cache-read"
       MSG_OUTPUT="output"
       MSG_MODEL="model:"
+      MSG_TOTAL="Total:"
+      MSG_PROJECTS="Projects:"
+      MSG_SESSIONS="sessions"
+      MSG_SELECT_PROJ="Number / l — ${MSG_LANG_SWITCH} / q — quit: "
       MSG_DEPS_ERR="Missing dependencies:"
       ;;
   esac
@@ -157,21 +221,31 @@ check_deps() {
 
 check_deps
 
+BANNER_WIDTH=39
+BANNER_VER_INDENT=9
 VER_STR="script v${SCRIPT_VERSION}"
-VER_PAD=$(printf '%*s' $(( 39 - 9 - ${#VER_STR} )) '')
+VER_PAD=$(printf '%*s' $(( BANNER_WIDTH - BANNER_VER_INDENT - ${#VER_STR} )) '')
 
-# Load sessions once
-rows=()
-while IFS= read -r line; do
-  rows+=("$line")
-done < <(python3 - <<'PYEOF'
+load_sessions() {
+  rows=()
+  TOTAL_INP=0; TOTAL_CR=0; TOTAL_RD=0; TOTAL_OUT=0
+  while IFS= read -r line; do
+    if [[ "$line" == "TOTALS|"* ]]; then
+      IFS='|' read -r _ TOTAL_INP TOTAL_CR TOTAL_RD TOTAL_OUT <<< "$line"
+    else
+      rows+=("$line")
+    fi
+  done < <(python3 - <<'PYEOF'
 import json, os, re
 from pathlib import Path
 
 project_dir = os.environ.get("CDLG_PROJECT_DIR", os.getcwd())
 slug = re.sub(r'[^a-zA-Z0-9]', '-', project_dir)
 sessions_dir = Path(os.environ.get("HOME", os.path.expanduser("~"))) / f".claude/projects/{slug}"
+def fmt(n): return f"{n//1000}k" if n >= 1000 else str(n)
+
 rows = []
+total_inp_real, total_inp_cr, total_inp_rd, total_out = 0, 0, 0, 0
 
 for jsonl_path in sorted(sessions_dir.glob("*.jsonl")):
     session_id = jsonl_path.stem
@@ -214,25 +288,112 @@ for jsonl_path in sorted(sessions_dir.glob("*.jsonl")):
     except Exception:
         pass
 
+    total_inp_real += inp_real
+    total_inp_cr   += inp_cr
+    total_inp_rd   += inp_rd
+    total_out      += out
+
     if first_msg:
-        def fmt(n): return f"{n//1000}k" if n >= 1000 else str(n)
         last_date = last_ts[:10]
         model_s = re.sub(r'^claude-', '', model)
         model_s = re.sub(r'-\d{8,}.*$', '', model_s) or '?'
-        rows.append(f"{last_date}|{session_id}|{msg_count}|{model_s}|{'↑'+fmt(inp_real):>7}|{'+'+fmt(inp_cr):>6}|{'~'+fmt(inp_rd):>7}|{'↓'+fmt(out):>6}|{first_msg}")
+        rows.append((last_ts, f"{last_date}|{session_id}|{msg_count}|{model_s}|{'↑'+fmt(inp_real):>7}|{'+'+fmt(inp_cr):>6}|{'~'+fmt(inp_rd):>7}|{'↓'+fmt(out):>6}|{first_msg}"))
 
-rows.sort(reverse=True)
-for r in rows:
+print(f"TOTALS|{total_inp_real}|{total_inp_cr}|{total_inp_rd}|{total_out}")
+rows.sort(key=lambda x: x[0], reverse=True)
+for _, r in rows:
     print(r)
 PYEOF
-)
+  )
+}
+
+project_rows=()
+
+load_projects() {
+  project_rows=()
+  while IFS= read -r line; do
+    project_rows+=("$line")
+  done < <(python3 - <<'PYEOF'
+import json, os
+from pathlib import Path
+
+home = Path(os.environ.get("HOME", os.path.expanduser("~")))
+projects_dir = home / ".claude/projects"
+results = []
+
+for slug_dir in sorted(projects_dir.iterdir()):
+    if not slug_dir.is_dir():
+        continue
+    cwd = None
+    last_ts = ""
+    jsonl_files = list(slug_dir.glob("*.jsonl"))
+    session_count = len(jsonl_files)
+    for jsonl_path in jsonl_files:
+        try:
+            with open(jsonl_path) as f:
+                lines = f.readlines()
+            for line in reversed(lines):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    ts = rec.get("timestamp", "")
+                    if ts and ts > last_ts:
+                        last_ts = ts
+                except Exception:
+                    pass
+                break
+            if cwd is None:
+                for line in lines[:20]:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        if "cwd" in rec:
+                            cwd = rec["cwd"]
+                            break
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    if cwd:
+        results.append(f"{last_ts[:10]}|{session_count}|{cwd}")
+
+results.sort(reverse=True)
+for r in results:
+    print(r)
+PYEOF
+  )
+}
 
 declare -a ids
+declare -a project_paths
 
-show_menu() {
-  ids=()
-  clear
+fmt_tok() {
+  local n=$1
+  if (( n >= 1000000 )); then printf "%dM" $(( n/1000000 ))
+  elif (( n >= 1000 )); then printf "%dk" $(( n/1000 ))
+  else printf "%d" $n; fi
+}
 
+lang_toggle() {
+  local lang first="" seen=0
+  for lang in "${LANGS[@]}"; do
+    [[ -z "$first" ]] && first="$lang"
+    if [[ $seen -eq 1 ]]; then
+      _lang="$lang"
+      seen=2
+      break
+    fi
+    [[ "$lang" == "$_lang" ]] && seen=1
+  done
+  [[ $seen -eq 1 ]] && _lang="$first"
+  set_locale
+}
+
+show_banner() {
   echo -e "${C}"
   echo '    ╔═══════════════════════════════════════╗'
   echo '    ║                                       ║'
@@ -247,6 +408,34 @@ show_menu() {
   echo '    ╚═══════════════════════════════════════╝'
   echo -e "${N}"
   echo -e "  ${G}✓${D} claude ${VER_CLAUDE}   ${G}✓${D} python3 ${VER_PYTHON}   ${G}✓${D} bash ${VER_BASH}${N}"
+}
+
+show_project_picker() {
+  project_paths=()
+  clear
+  show_banner
+  echo ""
+  echo -e "  ${W}${MSG_PROJECTS}${N}"
+  echo ""
+
+  local i=1
+  for row in "${project_rows[@]}"; do
+    IFS='|' read -r date cnt path <<< "$row"
+    project_paths+=("$path")
+    printf "  ${G}%2d.${N} ${D}[%s]${N}  ${W}%2s${N} ${D}%s${N}  %s\n" \
+      "$i" "$date" "$cnt" "$MSG_SESSIONS" "$path"
+    ((i++))
+  done
+
+  echo ""
+  echo -e "  ${D}─────────────────────────────────────────${N}"
+  echo -e -n "  ${Y}${MSG_SELECT_PROJ}${N}"
+}
+
+show_menu() {
+  ids=()
+  clear
+  show_banner
   echo ""
 
   if [[ ${#rows[@]} -eq 0 ]]; then
@@ -268,9 +457,34 @@ show_menu() {
   done
 
   echo ""
+  echo -e "  ${D}${MSG_TOTAL} ${R}↑$(fmt_tok "$TOTAL_INP")${N} ${Y}+$(fmt_tok "$TOTAL_CR")${N} ${D}~$(fmt_tok "$TOTAL_RD")${N} ${G}↓$(fmt_tok "$TOTAL_OUT")${N}"
   echo -e "  ${D}─────────────────────────────────────────${N}"
   echo -e -n "  ${Y}${MSG_PROMPT}${N}"
 }
+
+if [[ -z "$CDLG_DIR" ]]; then
+  load_projects
+  while true; do
+    show_project_picker
+    read -r choice
+    echo ""
+    if [[ "$choice" == "l" || "$choice" == "L" ]]; then
+      lang_toggle
+    elif [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+      echo -e "  ${D}${MSG_EXIT}${N}"
+      exit 0
+    elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#project_paths[@]} )); then
+      PROJECT_DIR="${project_paths[$((choice-1))]}"
+      export CDLG_PROJECT_DIR="$PROJECT_DIR"
+      break
+    else
+      echo -e "  ${R}${MSG_INVALID}${N}"
+      sleep 1
+    fi
+  done
+fi
+
+load_sessions
 
 while true; do
   show_menu
@@ -280,8 +494,7 @@ while true; do
   if [[ -z "$choice" ]]; then
     cd "$PROJECT_DIR" && exec claude
   elif [[ "$choice" == "l" || "$choice" == "L" ]]; then
-    [[ "$_lang" == "ru" ]] && _lang="en" || _lang="ru"
-    set_locale
+    lang_toggle
   elif [[ "$choice" == "q" || "$choice" == "Q" ]]; then
     echo -e "  ${D}${MSG_EXIT}${N}"
     exit 0
