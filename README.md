@@ -44,7 +44,7 @@ All sessions launched from this directory are grouped together and shown by `cdl
 **Quick install (recommended)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/v0.0.2/cdlg.sh -o /tmp/cdlg.sh
+curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/v0.0.3/cdlg.sh -o /tmp/cdlg.sh
 bash /tmp/cdlg.sh --install
 ```
 
@@ -107,10 +107,22 @@ cdlg
 
 ## Usage
 
+**Session list**
+
 | Key | Action |
 |-----|--------|
 | `1`–`N` | Resume conversation N |
+| `dN` | Delete conversation N |
 | Enter | Start a new conversation |
+| `l` | Toggle language (EN ↔ RU) |
+| `q` | Quit |
+
+**Project picker**
+
+| Key | Action |
+|-----|--------|
+| `1`–`N` | Open project N |
+| `dN` | Delete project N (removes `~/.claude/projects/<slug>`) |
 | `l` | Toggle language (EN ↔ RU) |
 | `q` | Quit |
 
