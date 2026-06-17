@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="0.0.3"
+SCRIPT_VERSION="0.0.4"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,6 +42,7 @@ Environment:
 Keys (session list):
   1–N    Resume session N
   dN     Delete session N
+  c      Delete all empty sessions (slash-commands only)
   Enter  New session
   l      Toggle EN/RU
   q      Quit
@@ -148,7 +149,10 @@ set_locale() {
   case "$_lang" in
     ru)
       MSG_NO_DIALOGS="Диалогов нет. Начинаем новый."
-      MSG_PROMPT="Номер / dN — удал / Enter — новый / l — ${MSG_LANG_SWITCH} / q — выход: "
+      MSG_PROMPT="Номер / dN — удал / c — очист / Enter — новый / l — ${MSG_LANG_SWITCH} / q — выход: "
+      MSG_CLEAN_CONFIRM="Удалить %n пустых сессий? [y/N]: "
+      MSG_CLEAN_NONE="Пустых сессий нет."
+      MSG_CLEAN_DONE="Очищено."
       MSG_DIALOGS="Диалоги:"
       MSG_EXIT="Выход."
       MSG_INVALID="Неверный ввод."
@@ -172,7 +176,10 @@ set_locale() {
       ;;
     *)
       MSG_NO_DIALOGS="No dialogs. Starting new."
-      MSG_PROMPT="Number / dN — del / Enter — new / l — ${MSG_LANG_SWITCH} / q — quit: "
+      MSG_PROMPT="Number / dN — del / c — clean / Enter — new / l — ${MSG_LANG_SWITCH} / q — quit: "
+      MSG_CLEAN_CONFIRM="Delete %n empty sessions? [y/N]: "
+      MSG_CLEAN_NONE="No empty sessions."
+      MSG_CLEAN_DONE="Cleaned."
       MSG_DIALOGS="Dialogs:"
       MSG_EXIT="Bye."
       MSG_INVALID="Invalid input."
@@ -476,7 +483,10 @@ show_menu() {
 
   if [[ ${#rows[@]} -eq 0 ]]; then
     echo -e "  ${Y}${MSG_NO_DIALOGS}${N}"
-    cd "$PROJECT_DIR" && exec claude
+    echo ""
+    echo -e "  ${D}─────────────────────────────────────────${N}"
+    echo -e -n "  ${Y}${MSG_PROMPT}${N}"
+    return
   fi
 
   echo -e "  ${W}${MSG_DIALOGS}${N} ${D}${PROJECT_DIR}${N}"
@@ -566,6 +576,66 @@ while true; do
     exit 0
   elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#ids[@]} )); then
     cd "$PROJECT_DIR" && exec claude --resume "${ids[$((choice-1))]}"
+  elif [[ "$choice" == "c" || "$choice" == "C" ]]; then
+    if [[ -n "$SESSIONS_DIR_PATH" && "$SESSIONS_DIR_PATH" == "$HOME/.claude/"* ]]; then
+      _empty_ids=()
+      _empty_info=()
+      while IFS=$'\x1f' read -r _eid _edate _ecmd; do
+        [[ -n "$_eid" ]] && _empty_ids+=("$_eid") && _empty_info+=("${_edate} ${_ecmd}")
+      done < <(CDLG_CLEAN_DIR="$SESSIONS_DIR_PATH" python3 - <<'CLEANEOF'
+import json, os, re as _re
+from pathlib import Path
+sessions_dir = Path(os.environ.get("CDLG_CLEAN_DIR", ""))
+for jsonl_path in sorted(sessions_dir.glob("*.jsonl"), reverse=True) if sessions_dir.is_dir() else []:
+    has_msg = False
+    last_ts = ""
+    cmd_preview = ""
+    try:
+        with open(jsonl_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line: continue
+                rec = json.loads(line)
+                ts = rec.get("timestamp", "")
+                if ts: last_ts = ts
+                is_user = (rec.get("type") == "user" and not rec.get("isMeta")
+                           and isinstance(rec.get("message", {}).get("content"), str))
+                if is_user:
+                    content = rec["message"]["content"].strip()
+                    if content and not content.startswith("<"):
+                        has_msg = True
+                        break
+                    elif not cmd_preview and "<command-message>" in content:
+                        m = _re.search(r"<command-message>(.*?)</command-message>", content, _re.DOTALL)
+                        if m: cmd_preview = "/" + m.group(1).strip()
+    except Exception:
+        pass
+    if not has_msg:
+        date = last_ts[:10] if last_ts else "?"
+        print(f"{jsonl_path.stem}\x1f{date}\x1f{cmd_preview or '?'}")
+CLEANEOF
+      )
+      _cnt=${#_empty_ids[@]}
+      if (( _cnt == 0 )); then
+        echo -e "  ${D}${MSG_CLEAN_NONE}${N}"
+        sleep 1
+      else
+        for (( _i=0; _i<_cnt; _i++ )); do
+          printf "  ${D}%s${N}\n" "${_empty_info[$_i]}"
+        done
+        echo ""
+        echo -e -n "  ${R}${MSG_CLEAN_CONFIRM//%n/$_cnt}${N}"
+        read -r _confirm
+        if [[ "$_confirm" == "y" || "$_confirm" == "Y" ]]; then
+          for _eid in "${_empty_ids[@]}"; do
+            rm -f "${SESSIONS_DIR_PATH}/${_eid}.jsonl"
+          done
+          echo -e "  ${G}${MSG_CLEAN_DONE}${N}"
+          sleep 1
+          load_sessions
+        fi
+      fi
+    fi
   elif [[ "$choice" =~ ^[dD]([0-9]+)$ ]]; then
     _n="${BASH_REMATCH[1]}"
     if (( _n >= 1 && _n <= ${#ids[@]} )); then

@@ -44,7 +44,7 @@ Claude Code уже является консольным чатом. `cdlg` — 
 **Быстрая установка (рекомендуется)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/v0.0.3/cdlg.sh -o /tmp/cdlg.sh
+curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/v0.0.4/cdlg.sh -o /tmp/cdlg.sh
 bash /tmp/cdlg.sh --install
 ```
 
@@ -113,6 +113,7 @@ cdlg
 |---------|----------|
 | `1`–`N` | Возобновить диалог N |
 | `dN` | Удалить диалог N |
+| `c` | Удалить все пустые сессии (только slash-команды) |
 | Enter | Начать новый диалог |
 | `l` | Переключить язык (RU ↔ EN) |
 | `q` | Выход |

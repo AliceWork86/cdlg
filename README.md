@@ -44,7 +44,7 @@ All sessions launched from this directory are grouped together and shown by `cdl
 **Quick install (recommended)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/v0.0.3/cdlg.sh -o /tmp/cdlg.sh
+curl -fsSL https://raw.githubusercontent.com/AliceWork86/cdlg/v0.0.4/cdlg.sh -o /tmp/cdlg.sh
 bash /tmp/cdlg.sh --install
 ```
 
@@ -113,6 +113,7 @@ cdlg
 |-----|--------|
 | `1`–`N` | Resume conversation N |
 | `dN` | Delete conversation N |
+| `c` | Delete all empty sessions (slash-commands only) |
 | Enter | Start a new conversation |
 | `l` | Toggle language (EN ↔ RU) |
 | `q` | Quit |
