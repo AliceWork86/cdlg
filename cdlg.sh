@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="0.0.4"
+SCRIPT_VERSION="0.0.5"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -302,7 +302,7 @@ for jsonl_path in sorted(sessions_dir.glob("*.jsonl")) if sessions_dir.is_dir() 
                            and isinstance(rec.get("message", {}).get("content"), str))
                 if is_user:
                     content = rec["message"]["content"].strip()
-                    if content and not content.startswith("<"):
+                    if content and not content.startswith("<") and not content.startswith("/"):
                         if not first_msg:
                             first_msg = content[:60].replace("\r", "").replace("\n", " ")
                             first_ts = ts[:10]
@@ -602,17 +602,23 @@ for jsonl_path in sorted(sessions_dir.glob("*.jsonl"), reverse=True) if sessions
                            and isinstance(rec.get("message", {}).get("content"), str))
                 if is_user:
                     content = rec["message"]["content"].strip()
-                    if content and not content.startswith("<"):
+                    if content and not content.startswith("<") and not content.startswith("/"):
                         has_msg = True
                         break
                     elif not cmd_preview and "<command-message>" in content:
                         m = _re.search(r"<command-message>(.*?)</command-message>", content, _re.DOTALL)
                         if m: cmd_preview = "/" + m.group(1).strip()
+                    elif not cmd_preview and "<command-name>" in content:
+                        m = _re.search(r"<command-name>(.*?)</command-name>", content, _re.DOTALL)
+                        if m: cmd_preview = "/" + m.group(1).strip()
+                    elif not cmd_preview and content.startswith("/"):
+                        cmd_preview = content.split()[0][:20]
     except Exception:
         pass
     if not has_msg:
-        date = last_ts[:10] if last_ts else "?"
-        print(f"{jsonl_path.stem}\x1f{date}\x1f{cmd_preview or '?'}")
+        import datetime as _dt
+        date = last_ts[:10] if last_ts else _dt.date.fromtimestamp(jsonl_path.stat().st_mtime).isoformat()
+        print(f"{jsonl_path.stem}\x1f{date}\x1f{cmd_preview or '(empty)'}")
 CLEANEOF
       )
       _cnt=${#_empty_ids[@]}
